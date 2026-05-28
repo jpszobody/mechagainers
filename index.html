@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mechagainers</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;1,400&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="page">
+
+    <header>
+      <h1>Mechagainers</h1>
+      <p class="tagline">A few guys from the mechatronics program.</p>
+    </header>
+
+    <hr>
+
+    <section class="about">
+      <p>
+        We met studying mechatronics at [Your School]. We like building things,
+        going places, and figuring stuff out. This is our little corner of the internet.
+      </p>
+    </section>
+
+    <section>
+      <h2>The crew</h2>
+      <ul class="crew">
+        <li><span class="name">Jason</span></li>
+        <li><span class="name">Alex</span></li>
+        <li><span class="name">Jackson</span></li>
+        <li><span class="name">Logan</span></li>
+        <li><span class="name">Josiah</span></li>
+      </ul>
+    </section>
+
+    <hr>
+
+    <section>
+      <h2>Adventures</h2>
+      <div class="card-list">
+
+        <a class="card" href="https://adventure.mechagainers.com">
+          <div class="card-body">
+            <div class="card-meta">May 2026</div>
+            <div class="card-title">Iceland</div>
+            <div class="card-desc">A week driving around a volcanic island. Photos, map, the whole thing.</div>
+          </div>
+        </a>
+
+        <!-- future trips go here -->
+
+      </div>
+    </section>
+
+    <hr>
+
+    <section>
+      <h2>Projects</h2>
+      <div class="card-list">
+
+        <a class="card pdf-card" data-pdf="pdfs/MAE_435_Final_Project.pdf" data-title="Desparrow — Pneumatic Thrust Control" href="#">
+          <img class="card-img" src="img/wheel-of-despair.png" alt="Wheel of Despair diagram">
+          <div class="card-body">
+            <div class="card-meta">MAE 435 &middot; Spring 2026</div>
+            <div class="card-title">Desparrow — Pneumatic Thrust Control</div>
+            <div class="card-desc">Designed and implemented a feedback control system for a physical
+              rotational rig driven by compressed air through a proportional servo valve. We derived
+              the dynamics from first principles, tuned the controller using root locus and frequency
+              response methods, and validated it on the hardware — a test apparatus the department
+              affectionately calls the Wheel of Despair.</div>
+          </div>
+        </a>
+
+        <a class="card pdf-card" data-pdf="pdfs/JEM_420_Project.pdf" data-title="Quanser Aero — System Identification" href="#">
+          <img class="card-img" src="img/quanser-aero.png" alt="Quanser Aero">
+          <div class="card-body">
+            <div class="card-meta">JEM 420 &middot; Fall 2025</div>
+            <div class="card-title">Quanser Aero — System Identification</div>
+            <div class="card-desc">Modeled the full dynamics of a dual-propeller experimental platform
+              free to move in pitch and yaw. We started from analytical derivations, ran experiments,
+              and when the textbook constants turned out to be off by a factor of ten, re-identified
+              everything directly from real data using least squares and gradient descent in MATLAB.
+              Ended up with three validated coupled models accounting for nonlinear friction and a
+              moment of inertia that changes with pitch angle.</div>
+          </div>
+        </a>
+
+        <a class="card pdf-card" data-pdf="pdfs/ECE_306_Writeup.pdf" data-title="MSP430 IoT Robot" href="#">
+          <img class="card-img" src="img/msp430-robot.jpg" alt="MSP430 line-following robot">
+          <div class="card-body">
+            <div class="card-meta">ECE 306 &middot; Fall 2025</div>
+            <div class="card-title">MSP430 IoT Robot</div>
+            <div class="card-desc">Built a line-following robot from the ground up in bare-metal C on a
+              Texas Instruments MSP430 microcontroller. Wrote drivers for IR sensors, PWM motor control,
+              an LCD display, ADC and DAC, and circular UART buffers — then tied it together with a
+              hierarchical state machine and integrated an ESP32 module for WiFi-based remote
+              control.</div>
+          </div>
+        </a>
+
+      </div>
+    </section>
+
+    <footer>
+      <p>mechagainers.com</p>
+    </footer>
+
+  </div>
+
+  <!-- PDF Viewer Modal -->
+  <div id="pdf-modal" class="pdf-modal" role="dialog" aria-modal="true">
+    <div class="pdf-modal-bar">
+      <span id="pdf-modal-title" class="pdf-modal-title"></span>
+      <button id="pdf-modal-close" class="pdf-modal-close" aria-label="Close">&times;</button>
+    </div>
+    <div id="pdf-modal-pages" class="pdf-modal-pages">
+      <p id="pdf-loading" class="pdf-loading">Loading…</p>
+    </div>
+    <div class="pdf-modal-nav">
+      <button id="pdf-prev" class="pdf-nav-btn" aria-label="Previous page">&#8249;</button>
+      <span class="pdf-page-indicator">
+        <input id="pdf-page-input" class="pdf-page-input" type="number" min="1" value="1">
+        <span id="pdf-page-total" class="pdf-page-total">of —</span>
+      </span>
+      <button id="pdf-next" class="pdf-nav-btn" aria-label="Next page">&#8250;</button>
+    </div>
+  </div>
+  <div id="pdf-backdrop" class="pdf-backdrop"></div>
+
+  <script src="https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc =
+      'https://unpkg.com/pdfjs-dist@2.16.105/build/pdf.worker.min.js';
+
+    const modal      = document.getElementById('pdf-modal');
+    const backdrop   = document.getElementById('pdf-backdrop');
+    const pagesEl    = document.getElementById('pdf-modal-pages');
+    const titleEl    = document.getElementById('pdf-modal-title');
+    const closeBtn   = document.getElementById('pdf-modal-close');
+    const prevBtn    = document.getElementById('pdf-prev');
+    const nextBtn    = document.getElementById('pdf-next');
+    const pageInput  = document.getElementById('pdf-page-input');
+    const totalEl    = document.getElementById('pdf-page-total');
+
+    let canvases = [];
+    let observer = null;
+
+    function scrollToPage(n) {
+      const c = canvases[n - 1];
+      if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function setCurrentPage(n) {
+      pageInput.value = n;
+      prevBtn.disabled = n <= 1;
+      nextBtn.disabled = n >= canvases.length;
+    }
+
+    async function openPdf(src, title) {
+      titleEl.textContent = title;
+      totalEl.textContent = '/ —';
+      pageInput.value = 1;
+      canvases = [];
+      pagesEl.innerHTML = '<p class="pdf-loading">Loading…</p>';
+      modal.classList.add('open');
+      backdrop.classList.add('open');
+      document.body.style.overflow = 'hidden';
+
+      try {
+        const pdf = await pdfjsLib.getDocument(src).promise;
+        pagesEl.innerHTML = '';
+        totalEl.textContent = `of ${pdf.numPages}`;
+        pageInput.max = pdf.numPages;
+        pageInput.style.width = String(pdf.numPages).length + 'ch';
+
+        await new Promise(r => requestAnimationFrame(r));
+
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page           = await pdf.getPage(i);
+          const dpr            = window.devicePixelRatio || 1;
+          const containerWidth = pagesEl.clientWidth - 48 || 800;
+          const baseViewport   = page.getViewport({ scale: 1 });
+          const cssScale       = Math.min(containerWidth / baseViewport.width, 2);
+          const viewport       = page.getViewport({ scale: cssScale * dpr });
+
+          const canvas         = document.createElement('canvas');
+          canvas.width         = viewport.width;
+          canvas.height        = viewport.height;
+          canvas.style.width   = (viewport.width  / dpr) + 'px';
+          canvas.style.height  = (viewport.height / dpr) + 'px';
+          canvas.className     = 'pdf-page-canvas';
+          canvas.dataset.page  = i;
+          pagesEl.appendChild(canvas);
+          canvases.push(canvas);
+
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+        }
+
+        // Track current page as user scrolls
+        if (observer) observer.disconnect();
+        observer = new IntersectionObserver(entries => {
+          const visible = entries
+            .filter(e => e.isIntersecting)
+            .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+          if (visible) setCurrentPage(Number(visible.target.dataset.page));
+        }, { root: pagesEl, threshold: 0.3 });
+        canvases.forEach(c => observer.observe(c));
+        setCurrentPage(1);
+
+      } catch (err) {
+        pagesEl.innerHTML = `<p class="pdf-loading">Couldn't load PDF: ${err.message}</p>`;
+      }
+    }
+
+    function closePdf() {
+      modal.classList.remove('open');
+      backdrop.classList.remove('open');
+      document.body.style.overflow = '';
+      if (observer) { observer.disconnect(); observer = null; }
+      setTimeout(() => {
+        pagesEl.innerHTML = '<p class="pdf-loading">Loading…</p>';
+        canvases = [];
+      }, 300);
+    }
+
+    prevBtn.addEventListener('click', () => {
+      const cur = parseInt(pageInput.value) || 1;
+      if (cur > 1) scrollToPage(cur - 1);
+    });
+    nextBtn.addEventListener('click', () => {
+      const cur = parseInt(pageInput.value) || 1;
+      if (cur < canvases.length) scrollToPage(cur + 1);
+    });
+    pageInput.addEventListener('change', () => {
+      const n = Math.max(1, Math.min(parseInt(pageInput.value) || 1, canvases.length));
+      pageInput.value = n;
+      scrollToPage(n);
+    });
+
+    document.querySelectorAll('.pdf-card').forEach(card => {
+      card.addEventListener('click', e => {
+        e.preventDefault();
+        openPdf(card.dataset.pdf, card.dataset.title);
+      });
+    });
+
+    closeBtn.addEventListener('click', closePdf);
+    backdrop.addEventListener('click', closePdf);
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closePdf(); });
+  </script>
+
+</body>
+</html>
