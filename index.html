@@ -148,7 +148,8 @@
     const totalEl    = document.getElementById('pdf-page-total');
 
     let canvases = [];
-    let observer = null;
+    let renderObserver = null;
+    let pageObserver   = null;
 
     function scrollToPage(n) {
       const c = canvases[n - 1];
@@ -203,7 +204,7 @@
           canvases.push(canvas);
         }
 
-        // Set up navigation immediately, render pages lazily as they scroll into view
+        // Lazy rendering
         const rendering = new Set();
 
         async function renderCanvas(canvas) {
@@ -224,30 +225,37 @@
           } catch(e) { canvas.dataset.rendered = 'false'; rendering.delete(canvas); }
         }
 
-        function prerenderAhead(currentPageNum, count = 3) {
+        function prerenderAhead(n, count = 3) {
           for (let i = 1; i <= count; i++) {
-            const c = canvases[currentPageNum - 1 + i];
+            const c = canvases[n - 1 + i];
             if (c) renderCanvas(c);
           }
         }
 
-        if (observer) observer.disconnect();
-        observer = new IntersectionObserver(entries => {
-          const visible = entries
-            .filter(e => e.isIntersecting)
-            .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-          if (visible) {
-            const n = Number(visible.target.dataset.page);
+        // Observer 1: render trigger — large margin so pages load before they're visible
+        if (renderObserver) renderObserver.disconnect();
+        renderObserver = new IntersectionObserver(entries => {
+          entries.forEach(entry => { if (entry.isIntersecting) renderCanvas(entry.target); });
+        }, { root: pagesEl, threshold: 0, rootMargin: '400px' });
+
+        // Observer 2: page tracking — no margin, multiple thresholds so it fires as ratios change.
+        // Stores ratio on the canvas element and scans all canvases to find the most visible one.
+        if (pageObserver) pageObserver.disconnect();
+        pageObserver = new IntersectionObserver(entries => {
+          entries.forEach(e => { e.target._ratio = e.isIntersecting ? e.intersectionRatio : 0; });
+          let best = null, bestRatio = -1;
+          for (const c of canvases) {
+            const r = c._ratio || 0;
+            if (r > bestRatio) { bestRatio = r; best = c; }
+          }
+          if (best && bestRatio > 0) {
+            const n = Number(best.dataset.page);
             setCurrentPage(n);
             prerenderAhead(n);
           }
+        }, { root: pagesEl, threshold: [0, 0.1, 0.25, 0.5, 0.75, 1.0] });
 
-          entries.forEach(entry => {
-            if (entry.isIntersecting) renderCanvas(entry.target);
-          });
-        }, { root: pagesEl, threshold: 0.05, rootMargin: '300px' });
-
-        canvases.forEach(c => observer.observe(c));
+        canvases.forEach(c => { renderObserver.observe(c); pageObserver.observe(c); });
         setCurrentPage(1);
         prerenderAhead(1);
 
@@ -260,7 +268,8 @@
       modal.classList.remove('open');
       backdrop.classList.remove('open');
       document.body.style.overflow = '';
-      if (observer) { observer.disconnect(); observer = null; }
+      if (renderObserver) { renderObserver.disconnect(); renderObserver = null; }
+      if (pageObserver)   { pageObserver.disconnect();   pageObserver   = null; }
       setTimeout(() => {
         pagesEl.innerHTML = '<p class="pdf-loading">Loading…</p>';
         canvases = [];
@@ -269,11 +278,11 @@
 
     prevBtn.addEventListener('click', () => {
       const cur = parseInt(pageInput.value) || 1;
-      if (cur > 1) scrollToPage(cur - 1);
+      if (cur > 1) { setCurrentPage(cur - 1); scrollToPage(cur - 1); }
     });
     nextBtn.addEventListener('click', () => {
       const cur = parseInt(pageInput.value) || 1;
-      if (cur < canvases.length) scrollToPage(cur + 1);
+      if (cur < canvases.length) { setCurrentPage(cur + 1); scrollToPage(cur + 1); }
     });
     pageInput.addEventListener('change', () => {
       const n = Math.max(1, Math.min(parseInt(pageInput.value) || 1, canvases.length));
