@@ -205,36 +205,51 @@
 
         // Set up navigation immediately, render pages lazily as they scroll into view
         const rendering = new Set();
+
+        async function renderCanvas(canvas) {
+          if (canvas.dataset.rendered !== 'false') return;
+          if (rendering.has(canvas)) return;
+          rendering.add(canvas);
+          canvas.dataset.rendered = 'pending';
+          const pageNum = Number(canvas.dataset.page);
+          try {
+            const page  = await pdf.getPage(pageNum);
+            const vp    = page.getViewport({ scale: cssScale * dpr });
+            canvas.width  = vp.width;
+            canvas.height = vp.height;
+            canvas.style.width  = (vp.width  / dpr) + 'px';
+            canvas.style.height = (vp.height / dpr) + 'px';
+            await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+            canvas.dataset.rendered = 'true';
+          } catch(e) { canvas.dataset.rendered = 'false'; rendering.delete(canvas); }
+        }
+
+        function prerenderAhead(currentPageNum, count = 3) {
+          for (let i = 1; i <= count; i++) {
+            const c = canvases[currentPageNum - 1 + i];
+            if (c) renderCanvas(c);
+          }
+        }
+
         if (observer) observer.disconnect();
         observer = new IntersectionObserver(entries => {
           const visible = entries
             .filter(e => e.isIntersecting)
             .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-          if (visible) setCurrentPage(Number(visible.target.dataset.page));
+          if (visible) {
+            const n = Number(visible.target.dataset.page);
+            setCurrentPage(n);
+            prerenderAhead(n);
+          }
 
-          entries.forEach(async entry => {
-            if (!entry.isIntersecting) return;
-            if (entry.target.dataset.rendered !== 'false') return;
-            if (rendering.has(entry.target)) return;
-            rendering.add(entry.target);
-            entry.target.dataset.rendered = 'pending';
-            const pageNum = Number(entry.target.dataset.page);
-            try {
-              const page     = await pdf.getPage(pageNum);
-              const vp       = page.getViewport({ scale: cssScale * dpr });
-              const canvas   = entry.target;
-              canvas.width   = vp.width;
-              canvas.height  = vp.height;
-              canvas.style.width  = (vp.width  / dpr) + 'px';
-              canvas.style.height = (vp.height / dpr) + 'px';
-              await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
-              canvas.dataset.rendered = 'true';
-            } catch(e) { entry.target.dataset.rendered = 'false'; rendering.delete(entry.target); }
+          entries.forEach(entry => {
+            if (entry.isIntersecting) renderCanvas(entry.target);
           });
         }, { root: pagesEl, threshold: 0.05, rootMargin: '300px' });
 
         canvases.forEach(c => observer.observe(c));
         setCurrentPage(1);
+        prerenderAhead(1);
 
       } catch (err) {
         pagesEl.innerHTML = `<p class="pdf-loading">Couldn't load PDF: ${err.message}</p>`;
