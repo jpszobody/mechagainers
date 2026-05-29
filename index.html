@@ -163,7 +163,7 @@
 
     async function openPdf(src, title) {
       titleEl.textContent = title;
-      totalEl.textContent = '/ —';
+      totalEl.textContent = 'of —';
       pageInput.value = 1;
       canvases = [];
       pagesEl.innerHTML = '<p class="pdf-loading">Loading…</p>';
@@ -172,7 +172,16 @@
       document.body.style.overflow = 'hidden';
 
       try {
-        const pdf = await pdfjsLib.getDocument(src).promise;
+        const pdf            = await pdfjsLib.getDocument(src).promise;
+        const dpr            = window.devicePixelRatio || 1;
+        const containerWidth = pagesEl.clientWidth - 48 || 800;
+
+        // Use first page to get dimensions for all placeholders
+        const firstPage    = await pdf.getPage(1);
+        const baseViewport = firstPage.getViewport({ scale: 1 });
+        const cssScale     = Math.min(containerWidth / baseViewport.width, 2);
+        const refViewport  = firstPage.getViewport({ scale: cssScale * dpr });
+
         pagesEl.innerHTML = '';
         totalEl.textContent = `of ${pdf.numPages}`;
         pageInput.max = pdf.numPages;
@@ -180,35 +189,50 @@
 
         await new Promise(r => requestAnimationFrame(r));
 
+        // Create all canvas placeholders immediately so navigation works
         for (let i = 1; i <= pdf.numPages; i++) {
-          const page           = await pdf.getPage(i);
-          const dpr            = window.devicePixelRatio || 1;
-          const containerWidth = pagesEl.clientWidth - 48 || 800;
-          const baseViewport   = page.getViewport({ scale: 1 });
-          const cssScale       = Math.min(containerWidth / baseViewport.width, 2);
-          const viewport       = page.getViewport({ scale: cssScale * dpr });
-
           const canvas         = document.createElement('canvas');
-          canvas.width         = viewport.width;
-          canvas.height        = viewport.height;
-          canvas.style.width   = (viewport.width  / dpr) + 'px';
-          canvas.style.height  = (viewport.height / dpr) + 'px';
+          canvas.width         = refViewport.width;
+          canvas.height        = refViewport.height;
+          canvas.style.width   = (refViewport.width  / dpr) + 'px';
+          canvas.style.height  = (refViewport.height / dpr) + 'px';
           canvas.className     = 'pdf-page-canvas';
           canvas.dataset.page  = i;
+          canvas.dataset.rendered = 'false';
           pagesEl.appendChild(canvas);
           canvases.push(canvas);
-
-          await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
         }
 
-        // Track current page as user scrolls
+        // Set up navigation immediately, render pages lazily as they scroll into view
+        const rendering = new Set();
         if (observer) observer.disconnect();
         observer = new IntersectionObserver(entries => {
           const visible = entries
             .filter(e => e.isIntersecting)
             .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
           if (visible) setCurrentPage(Number(visible.target.dataset.page));
-        }, { root: pagesEl, threshold: 0.3 });
+
+          entries.forEach(async entry => {
+            if (!entry.isIntersecting) return;
+            if (entry.target.dataset.rendered !== 'false') return;
+            if (rendering.has(entry.target)) return;
+            rendering.add(entry.target);
+            entry.target.dataset.rendered = 'pending';
+            const pageNum = Number(entry.target.dataset.page);
+            try {
+              const page     = await pdf.getPage(pageNum);
+              const vp       = page.getViewport({ scale: cssScale * dpr });
+              const canvas   = entry.target;
+              canvas.width   = vp.width;
+              canvas.height  = vp.height;
+              canvas.style.width  = (vp.width  / dpr) + 'px';
+              canvas.style.height = (vp.height / dpr) + 'px';
+              await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+              canvas.dataset.rendered = 'true';
+            } catch(e) { entry.target.dataset.rendered = 'false'; rendering.delete(entry.target); }
+          });
+        }, { root: pagesEl, threshold: 0.05, rootMargin: '300px' });
+
         canvases.forEach(c => observer.observe(c));
         setCurrentPage(1);
 
