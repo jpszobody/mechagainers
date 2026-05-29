@@ -149,21 +149,44 @@
 
     let canvases = [];
     let renderObserver = null;
-    let pageObserver   = null;
-    let suppressObserver = false;
+    let navLock = false;
+    let scrollTimer = null;
 
-    function scrollToPage(n) {
-      const c = canvases[n - 1];
-      if (!c) return;
-      // getBoundingClientRect gives viewport-relative positions; compute scroll offset from that
-      const top = c.getBoundingClientRect().top - pagesEl.getBoundingClientRect().top + pagesEl.scrollTop;
-      pagesEl.scrollTo({ top: top - 24, behavior: 'smooth' });
-    }
+    // ── Page tracking via scroll event (simpler and more reliable than IntersectionObserver) ──
+    pagesEl.addEventListener('scroll', () => {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(() => {
+        if (navLock || !canvases.length) return;
+        // Find the last canvas whose top edge is at or above 30% down the container
+        const threshold = pagesEl.getBoundingClientRect().top + pagesEl.clientHeight * 0.3;
+        let page = 1;
+        for (let i = 0; i < canvases.length; i++) {
+          if (canvases[i].getBoundingClientRect().top <= threshold) page = i + 1;
+          else break;
+        }
+        setCurrentPage(page);
+      }, 50);
+    }, { passive: true });
 
     function setCurrentPage(n) {
       pageInput.value = n;
       prevBtn.disabled = n <= 1;
       nextBtn.disabled = n >= canvases.length;
+    }
+
+    function scrollToPage(n) {
+      const c = canvases[n - 1];
+      if (!c) return;
+      // Direct scrollTop assignment — reliable across all browsers and containers
+      pagesEl.scrollTop = c.getBoundingClientRect().top - pagesEl.getBoundingClientRect().top + pagesEl.scrollTop - 24;
+    }
+
+    function navigateTo(n) {
+      navLock = true;
+      setCurrentPage(n);
+      scrollToPage(n);
+      clearTimeout(navigateTo._t);
+      navigateTo._t = setTimeout(() => { navLock = false; }, 300);
     }
 
     async function openPdf(src, title) {
@@ -181,7 +204,6 @@
         const dpr            = window.devicePixelRatio || 1;
         const containerWidth = pagesEl.clientWidth - 48 || 800;
 
-        // Use first page to get dimensions for all placeholders
         const firstPage    = await pdf.getPage(1);
         const baseViewport = firstPage.getViewport({ scale: 1 });
         const cssScale     = Math.min(containerWidth / baseViewport.width, 2);
@@ -192,9 +214,7 @@
         pageInput.max = pdf.numPages;
         pageInput.style.width = String(pdf.numPages).length + 'ch';
 
-        await new Promise(r => setTimeout(r, 0));
-
-        // Create all canvas placeholders immediately so navigation works
+        // Create all canvas placeholders immediately so navigation works before rendering finishes
         for (let i = 1; i <= pdf.numPages; i++) {
           const canvas         = document.createElement('canvas');
           canvas.width         = refViewport.width;
@@ -208,7 +228,7 @@
           canvases.push(canvas);
         }
 
-        // Lazy rendering
+        // Lazy rendering — one IntersectionObserver just for triggering renders
         const rendering = new Set();
 
         async function renderCanvas(canvas) {
@@ -220,8 +240,8 @@
           try {
             const page  = await pdf.getPage(pageNum);
             const vp    = page.getViewport({ scale: cssScale * dpr });
-            canvas.width  = vp.width;
-            canvas.height = vp.height;
+            canvas.width        = vp.width;
+            canvas.height       = vp.height;
             canvas.style.width  = (vp.width  / dpr) + 'px';
             canvas.style.height = (vp.height / dpr) + 'px';
             await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
@@ -236,33 +256,18 @@
           }
         }
 
-        // Observer 1: render trigger — large margin so pages load before they're visible
         if (renderObserver) renderObserver.disconnect();
         renderObserver = new IntersectionObserver(entries => {
-          entries.forEach(entry => { if (entry.isIntersecting) renderCanvas(entry.target); });
-        }, { root: pagesEl, threshold: 0, rootMargin: '400px' });
+          entries.forEach(entry => {
+            if (entry.isIntersecting) {
+              renderCanvas(entry.target);
+              prerenderAhead(Number(entry.target.dataset.page));
+            }
+          });
+        }, { root: pagesEl, threshold: 0, rootMargin: '500px' });
 
-        // Observer 2: page tracking — no margin, multiple thresholds so it fires as ratios change.
-        // Stores ratio on the canvas element and scans all canvases to find the most visible one.
-        if (pageObserver) pageObserver.disconnect();
-        pageObserver = new IntersectionObserver(entries => {
-          if (suppressObserver) return;
-          entries.forEach(e => { e.target._ratio = e.isIntersecting ? e.intersectionRatio : 0; });
-          let best = null, bestRatio = -1;
-          for (const c of canvases) {
-            const r = c._ratio || 0;
-            if (r > bestRatio) { bestRatio = r; best = c; }
-          }
-          if (best && bestRatio > 0) {
-            const n = Number(best.dataset.page);
-            setCurrentPage(n);
-            prerenderAhead(n);
-          }
-        }, { root: pagesEl, threshold: [0, 0.1, 0.25, 0.5, 0.75, 1.0] });
-
-        canvases.forEach(c => { renderObserver.observe(c); pageObserver.observe(c); });
+        canvases.forEach(c => renderObserver.observe(c));
         setCurrentPage(1);
-        prerenderAhead(1);
 
       } catch (err) {
         pagesEl.innerHTML = `<p class="pdf-loading">Couldn't load PDF: ${err.message}</p>`;
@@ -274,19 +279,10 @@
       backdrop.classList.remove('open');
       document.body.style.overflow = '';
       if (renderObserver) { renderObserver.disconnect(); renderObserver = null; }
-      if (pageObserver)   { pageObserver.disconnect();   pageObserver   = null; }
       setTimeout(() => {
         pagesEl.innerHTML = '<p class="pdf-loading">Loading…</p>';
         canvases = [];
       }, 300);
-    }
-
-    function navigateTo(n) {
-      suppressObserver = true;
-      setCurrentPage(n);
-      scrollToPage(n);
-      clearTimeout(navigateTo._t);
-      navigateTo._t = setTimeout(() => { suppressObserver = false; }, 800);
     }
 
     prevBtn.addEventListener('click', () => {
