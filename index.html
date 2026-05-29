@@ -194,13 +194,18 @@
       totalEl.textContent = 'of —';
       pageInput.value = 1;
       canvases = [];
-      pagesEl.innerHTML = '<p class="pdf-loading">Loading…</p>';
+      pagesEl.innerHTML = '<p class="pdf-loading">Loading document…</p>';
       modal.classList.add('open');
       backdrop.classList.add('open');
       document.body.style.overflow = 'hidden';
 
       try {
-        const pdf            = await pdfjsLib.getDocument(src).promise;
+        const pdf            = await pdfjsLib.getDocument({
+          url: src,
+          rangeChunkSize: 65536,   // fetch in 64 KB chunks
+          disableAutoFetch: true,  // don't eagerly download the whole file
+          disableStream: false,
+        }).promise;
         const dpr            = window.devicePixelRatio || 1;
         const containerWidth = pagesEl.clientWidth - 48 || 800;
 
