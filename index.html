@@ -150,10 +150,13 @@
     let canvases = [];
     let renderObserver = null;
     let pageObserver   = null;
+    let suppressObserver = false;
 
     function scrollToPage(n) {
       const c = canvases[n - 1];
-      if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (!c) return;
+      // Scroll the modal container directly — scrollIntoView targets the window in a fixed modal
+      pagesEl.scrollTo({ top: c.offsetTop - 24, behavior: 'smooth' });
     }
 
     function setCurrentPage(n) {
@@ -242,6 +245,7 @@
         // Stores ratio on the canvas element and scans all canvases to find the most visible one.
         if (pageObserver) pageObserver.disconnect();
         pageObserver = new IntersectionObserver(entries => {
+          if (suppressObserver) return;
           entries.forEach(e => { e.target._ratio = e.isIntersecting ? e.intersectionRatio : 0; });
           let best = null, bestRatio = -1;
           for (const c of canvases) {
@@ -276,18 +280,25 @@
       }, 300);
     }
 
+    function navigateTo(n) {
+      suppressObserver = true;
+      setCurrentPage(n);
+      scrollToPage(n);
+      clearTimeout(navigateTo._t);
+      navigateTo._t = setTimeout(() => { suppressObserver = false; }, 800);
+    }
+
     prevBtn.addEventListener('click', () => {
       const cur = parseInt(pageInput.value) || 1;
-      if (cur > 1) { setCurrentPage(cur - 1); scrollToPage(cur - 1); }
+      if (cur > 1) navigateTo(cur - 1);
     });
     nextBtn.addEventListener('click', () => {
       const cur = parseInt(pageInput.value) || 1;
-      if (cur < canvases.length) { setCurrentPage(cur + 1); scrollToPage(cur + 1); }
+      if (cur < canvases.length) navigateTo(cur + 1);
     });
     pageInput.addEventListener('change', () => {
       const n = Math.max(1, Math.min(parseInt(pageInput.value) || 1, canvases.length));
-      pageInput.value = n;
-      scrollToPage(n);
+      navigateTo(n);
     });
 
     document.querySelectorAll('.pdf-card').forEach(card => {
