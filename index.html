@@ -155,8 +155,9 @@
     function scrollToPage(n) {
       const c = canvases[n - 1];
       if (!c) return;
-      // Scroll the modal container directly — scrollIntoView targets the window in a fixed modal
-      pagesEl.scrollTo({ top: c.offsetTop - 24, behavior: 'smooth' });
+      // getBoundingClientRect gives viewport-relative positions; compute scroll offset from that
+      const top = c.getBoundingClientRect().top - pagesEl.getBoundingClientRect().top + pagesEl.scrollTop;
+      pagesEl.scrollTo({ top: top - 24, behavior: 'smooth' });
     }
 
     function setCurrentPage(n) {
@@ -191,7 +192,7 @@
         pageInput.max = pdf.numPages;
         pageInput.style.width = String(pdf.numPages).length + 'ch';
 
-        await new Promise(r => requestAnimationFrame(r));
+        await new Promise(r => setTimeout(r, 0));
 
         // Create all canvas placeholders immediately so navigation works
         for (let i = 1; i <= pdf.numPages; i++) {
